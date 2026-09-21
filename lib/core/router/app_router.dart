@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/register_page.dart';
+import '../../features/notes/presentation/note_editor_page.dart';
 import '../../features/notes/presentation/notes_page.dart';
 import '../providers.dart';
 import 'routes.dart';
@@ -41,6 +42,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.notes,
         builder: (context, state) => const NotesPage(),
+        routes: <RouteBase>[
+          // Порядок важен: «new» должен стоять раньше «:id», иначе создание
+          // записи уйдёт в маршрут редактирования с id = "new".
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const NoteEditorPage(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (context, state) => NoteEditorPage(
+              noteId: state.pathParameters['id'],
+            ),
+          ),
+        ],
       ),
     ],
   );

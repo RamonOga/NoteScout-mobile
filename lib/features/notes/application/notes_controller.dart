@@ -1,0 +1,186 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/error/api_exception.dart';
+import '../../../core/models/page_result.dart';
+import '../data/models.dart';
+import '../data/notes_api.dart';
+
+/// Состояние фильтров списка.
+///
+/// Отдельный провайдер, а не поле внутри списка: список пересобирается сам,
+/// когда фильтр меняется, и ему не нужно знать, кто и почему его поменял.
+class NotesQueryController extends Notifier<NotesQuery> {
+  @override
+  NotesQuery build() => const NotesQuery();
+
+  void setText(String value) {
+    if (state.text == value) return;
+    state = state.copyWith(text: value);
+  }
+
+  void toggleTag(String tag) {
+    final next = Set<String>.from(state.tags);
+    if (!next.remove(tag)) {
+      next.add(tag);
+    }
+    state = state.copyWith(tags: next);
+  }
+
+  void setMode(TagsMode mode) {
+    if (state.mode == mode) return;
+    state = state.copyWith(mode: mode);
+  }
+
+  void setIncludeArchived(bool value) {
+    if (state.includeArchived == value) return;
+    state = state.copyWith(includeArchived: value);
+  }
+
+  void setType(NoteType? type) {
+    if (state.type == type) return;
+    state = state.copyWith(type: type);
+  }
+
+  /// Снимает всё, кроме строки поиска: её пользователь стирает сам.
+  void clearFilters() => state = state.withoutFilters();
+}
+
+final notesQueryProvider =
+    NotifierProvider<NotesQueryController, NotesQuery>(NotesQueryController.new);
+
+/// Загруженные страницы заметок.
+class NotesState {
+  const NotesState({
+    required this.notes,
+    required this.page,
+    required this.hasNext,
+    this.totalElements = 0,
+    this.loadingMore = false,
+    this.loadMoreError,
+    this.refreshError,
+  });
+
+  final List<Note> notes;
+  final int page;
+  final bool hasNext;
+  final int totalElements;
+  final bool loadingMore;
+
+  /// Ошибка догрузки следующей страницы. Список при этом остаётся на экране —
+  /// терять уже загруженное из-за обрыва связи незачем.
+  final String? loadMoreError;
+
+  /// Ошибка обновления списка. Тоже не стирает данные: пользователь видит
+  /// баннер поверх того, что уже загружено.
+  final String? refreshError;
+
+  bool get isEmpty => notes.isEmpty;
+
+  NotesState copyWith({
+    List<Note>? notes,
+    int? page,
+    bool? hasNext,
+    int? totalElements,
+    bool? loadingMore,
+    String? loadMoreError,
+    String? refreshError,
+    bool clearLoadMoreError = false,
+    bool clearRefreshError = false,
+  }) =>
+      NotesState(
+        notes: notes ?? this.notes,
+        page: page ?? this.page,
+        hasNext: hasNext ?? this.hasNext,
+        totalElements: totalElements ?? this.totalElements,
+        loadingMore: loadingMore ?? this.loadingMore,
+        loadMoreError:
+            clearLoadMoreError ? null : (loadMoreError ?? this.loadMoreError),
+        refreshError:
+            clearRefreshError ? null : (refreshError ?? this.refreshError),
+      );
+}
+
+class NotesController extends AsyncNotifier<NotesState> {
+  @override
+  Future<NotesState> build() async {
+    // watch: смена фильтра пересобирает список автоматически.
+    final query = ref.watch(notesQueryProvider);
+    final page = await ref.watch(notesApiProvider).list(query: query);
+    return _stateFrom(page);
+  }
+
+  /// Полная перезагрузка — pull-to-refresh и после изменений.
+  ///
+  /// Ошибку не выбрасываем наружу: иначе уже загруженный список сменился бы
+  /// красным экраном. Если данных ещё нет, показать ошибку больше нечем —
+  /// тогда переводим состояние в AsyncError.
+  Future<void> refresh() async {
+    final query = ref.read(notesQueryProvider);
+    final current = state.value;
+
+    try {
+      final page = await ref.read(notesApiProvider).list(query: query);
+      state = AsyncData(_stateFrom(page));
+    } on ApiException catch (error) {
+      if (current == null) {
+        state = AsyncError<NotesState>(error, StackTrace.current);
+        return;
+      }
+      state = AsyncData(
+        current.copyWith(
+          refreshError: error.displayMessage,
+          clearLoadMoreError: true,
+        ),
+      );
+    }
+  }
+
+  Future<void> loadMore() async {
+    final current = state.value;
+    if (current == null || !current.hasNext || current.loadingMore) return;
+
+    state = AsyncData(
+      current.copyWith(
+        loadingMore: true,
+        clearLoadMoreError: true,
+        clearRefreshError: true,
+      ),
+    );
+
+    try {
+      final query = ref.read(notesQueryProvider);
+      final page = await ref
+          .read(notesApiProvider)
+          .list(query: query, page: current.page + 1);
+
+      state = AsyncData(
+        current.copyWith(
+          notes: <Note>[...current.notes, ...page.items],
+          page: page.page,
+          hasNext: page.hasNext,
+          totalElements: page.totalElements,
+          loadingMore: false,
+          clearLoadMoreError: true,
+          clearRefreshError: true,
+        ),
+      );
+    } on ApiException catch (error) {
+      state = AsyncData(
+        current.copyWith(
+          loadingMore: false,
+          loadMoreError: error.displayMessage,
+        ),
+      );
+    }
+  }
+
+  NotesState _stateFrom(PageResult<Note> page) => NotesState(
+        notes: page.items,
+        page: page.page,
+        hasNext: page.hasNext,
+        totalElements: page.totalElements,
+      );
+}
+
+final notesControllerProvider =
+    AsyncNotifierProvider<NotesController, NotesState>(NotesController.new);
