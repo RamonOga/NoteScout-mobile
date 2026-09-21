@@ -105,6 +105,9 @@ final notesApiProvider = Provider<NotesApi>(
 ///
 /// FutureProvider, а не вечный кеш: после создания или удаления заметки
 /// счётчики меняются, и список перезапрашивается через invalidate.
-final tagsProvider = FutureProvider<List<Tag>>(
-  (ref) => ref.watch(notesApiProvider).tags(),
-);
+final tagsProvider = FutureProvider<List<Tag>>((ref) {
+  // Теги тоже принадлежат пользователю — при смене аккаунта их нужно
+  // запросить заново, иначе на панели останутся чужие.
+  ref.watch(currentUserIdProvider);
+  return ref.watch(notesApiProvider).tags();
+});

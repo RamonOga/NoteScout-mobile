@@ -32,6 +32,35 @@ final sessionStoreProvider = Provider<SessionStore>(
   (ref) => SessionStore(ref.watch(tokenStorageProvider)),
 );
 
+/// Идентификатор текущего пользователя.
+///
+/// Нужен, чтобы данные, привязанные к пользователю, пересобирались при смене
+/// аккаунта. SessionStore — ChangeNotifier, и Riverpod о его уведомлениях
+/// не знает, поэтому здесь они транслируются в обычное состояние.
+///
+/// Значение меняется только при смене пользователя: обновление access-токена
+/// тоже сохраняет сессию, но идентификатор остаётся прежним, и данные
+/// не перезагружаются зря.
+class CurrentUserController extends Notifier<String?> {
+  @override
+  String? build() {
+    final store = ref.watch(sessionStoreProvider);
+
+    void onChange() {
+      final id = store.session?.user.id;
+      if (state != id) state = id;
+    }
+
+    store.addListener(onChange);
+    ref.onDispose(() => store.removeListener(onChange));
+
+    return store.session?.user.id;
+  }
+}
+
+final currentUserIdProvider =
+    NotifierProvider<CurrentUserController, String?>(CurrentUserController.new);
+
 /// Основной клиент приложения.
 final apiClientProvider = Provider<Dio>((ref) {
   final client = _createClient();
