@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mobile:
+    name: Анализ и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Версия зафиксирована той же, что и в локальной разработке:
+      # иначе анализатор начнёт находить или пропускать правила после
+      # очередного обновления Flutter.
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+
+      - name: Зависимости
+        run: flutter pub get
+
+      - name: Статический анализ
+        run: flutter analyze
+
+      - name: Тесты
+        run: flutter test
