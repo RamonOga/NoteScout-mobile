@@ -4,4 +4,10 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- В отладке бэкенд часто поднимают локально по http: 10.0.2.2 — это
+         хост-машина с точки зрения эмулятора. Android 9+ по умолчанию
+         запрещает открытый http, поэтому разрешаем его ТОЛЬКО в отладочной
+         сборке: релизная остаётся с одним https. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

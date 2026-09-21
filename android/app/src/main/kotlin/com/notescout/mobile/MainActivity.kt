@@ -1,4 +1,4 @@
-package com.notescout.notescout_mobile
+package com.notescout.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 
