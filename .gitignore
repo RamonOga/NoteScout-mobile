@@ -44,5 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Каталоги сборки Gradle: остаются после любой сборки Android.
+# Ключ подписи и android/key.properties уже перечислены в android/.gitignore.
+/android/build/
+/android/app/build/
+
 # Widget Preview related
 .widget_preview/
