@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Доступ в сеть. В шаблоне Flutter это разрешение лежит только
+         в отладочном манифесте, поэтому отладка работает, а release-сборка
+         молча не может сделать ни одного запроса. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
-        android:label="notescout_mobile"
+        android:label="NoteScout"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
