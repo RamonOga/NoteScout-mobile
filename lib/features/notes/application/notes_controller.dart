@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/api_exception.dart';
 import '../../../core/models/page_result.dart';
+import '../../../core/providers.dart';
 import '../data/models.dart';
 import '../data/notes_api.dart';
 
@@ -11,7 +12,12 @@ import '../data/notes_api.dart';
 /// когда фильтр меняется, и ему не нужно знать, кто и почему его поменял.
 class NotesQueryController extends Notifier<NotesQuery> {
   @override
-  NotesQuery build() => const NotesQuery();
+  NotesQuery build() {
+    // Фильтры относились к прошлому аккаунту и после смены пользователя
+    // запросто оставили бы новый список пустым — сбрасываем их вместе с ним.
+    ref.watch(currentUserIdProvider);
+    return const NotesQuery();
+  }
 
   void setText(String value) {
     if (state.text == value) return;
@@ -103,6 +109,12 @@ class NotesState {
 class NotesController extends AsyncNotifier<NotesState> {
   @override
   Future<NotesState> build() async {
+    // Записи принадлежат пользователю, и состояние провайдера живёт весь сеанс
+    // приложения. Без этой зависимости после выхода и входа другим аккаунтом
+    // на экране остались бы чужие записи: список просто не стал бы
+    // перезапрашивать. Ошибка была настоящей и выглядела как утечка данных.
+    ref.watch(currentUserIdProvider);
+
     // watch: смена фильтра пересобирает список автоматически.
     final query = ref.watch(notesQueryProvider);
     final page = await ref.watch(notesApiProvider).list(query: query);
