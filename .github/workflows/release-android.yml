@@ -1,0 +1,171 @@
+name: Release APK
+
+# Сборка APK для установки на телефон.
+#
+# Запускается двумя способами:
+#
+#   * вручную — Actions → Release APK → Run workflow; адрес API можно
+#     переопределить, по умолчанию берётся продовый;
+#   * тегом `v*` — тогда APK дополнительно прикладывается к GitHub Release.
+#
+# Подпись: если в настройках репозитория заданы четыре секрета с ключом
+# (см. README, «Сборка»), APK подписывается релизным ключом. Если их нет,
+# workflow не падает, а собирает APK с отладочным ключом и пишет об этом
+# в описании релиза.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Базовый URL API для --dart-define=API_BASE_URL"
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+# Два одновременных запуска на одном теге выпустили бы два релиза на один
+# коммит, поэтому лишние не отменяются, а ждут очереди.
+concurrency:
+  group: release-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Та же версия, что в ci.yml и в локальной разработке: иначе артефакт
+  # собран не тем компилятором, которым проверялся код.
+  FLUTTER_VERSION: 3.47.5
+  DEFAULT_API_BASE_URL: https://notescout.duckdns.org/api/v1
+
+jobs:
+  apk:
+    name: Сборка APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Значение приходит либо из поля ввода, либо (при запуске по тегу)
+      # остаётся пустым — тогда берётся адрес по умолчанию. Через env, а не
+      # подстановкой в текст скрипта, чтобы ввод не попал в шелл как код.
+      - name: Определить адрес API
+        id: api
+        env:
+          INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
+        run: |
+          set -euo pipefail
+          base_url="${INPUT_API_BASE_URL:-$DEFAULT_API_BASE_URL}"
+          echo "base_url=$base_url" >> "$GITHUB_OUTPUT"
+          echo "Адрес API: $base_url"
+
+      - name: Зависимости
+        run: flutter pub get
+
+      - name: Статический анализ
+        run: flutter analyze
+
+      - name: Тесты
+        run: flutter test
+
+      - name: Подготовить ключ подписи
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::Секреты подписи не заданы — APK будет подписан отладочным ключом"
+            echo "signed=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Частично заполненные секреты — это ошибка настройки, а не повод
+          # молча собрать сборку не тем ключом.
+          for name in KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Задан ANDROID_KEYSTORE_BASE64, но не задан ANDROID_${name}"
+              exit 1
+            fi
+          done
+
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+          cat > android/key.properties <<EOF
+          storeFile=release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "signed=yes" >> "$GITHUB_OUTPUT"
+          echo "Ключ подписи подготовлен"
+
+      - name: Собрать APK
+        env:
+          API_BASE_URL: ${{ steps.api.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+
+      # Имя файла по умолчанию — app-release.apk, без версии. В артефактах
+      # и в релизе версия в имени экономит вопрос «а это какая сборка».
+      - name: Переименовать по версии из pubspec
+        id: artifact
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -1)"
+          if [ -z "$version" ]; then
+            echo "::error::Не нашёл version в pubspec.yaml"
+            exit 1
+          fi
+          name="notescout-${version//+/-}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/$name"
+          {
+            echo "name=$name"
+            echo "path=build/app/outputs/flutter-apk/$name"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "Версия из pubspec: $version"
+          ls -lh "build/app/outputs/flutter-apk/$name"
+
+      # Артефакт выкладывается всегда, в том числе при запуске вручную и без
+      # релиза: со страницы запуска его можно скачать.
+      - name: Выложить артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+
+      - name: Приложить APK к релизу
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.path }}
+          body: |
+            APK `${{ steps.artifact.outputs.name }}` собран из коммита `${{ github.sha }}`.
+
+            * версия: `${{ steps.artifact.outputs.version }}`;
+            * адрес API, вшитый в сборку: `${{ steps.api.outputs.base_url }}`;
+            * подпись: ${{ steps.keystore.outputs.signed == 'yes' && 'релизный ключ' || 'отладочный ключ (секреты подписи не заданы)' }}.
+
+            Установка: скачать APK на телефон и открыть его. Android попросит
+            разрешить установку из этого источника.
