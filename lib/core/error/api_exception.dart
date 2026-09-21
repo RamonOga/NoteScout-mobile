@@ -100,3 +100,15 @@ class ApiException implements Exception {
   @override
   String toString() => 'ApiException($code, status=$statusCode): $message';
 }
+
+/// Превращает DioException в ApiException.
+///
+/// Выше этого слоя — в сервисах и виджетах — с Dio никто не работает: они
+/// видят только ApiException с кодом и готовым сообщением для пользователя.
+Future<T> guardApi<T>(Future<T> Function() action) async {
+  try {
+    return await action();
+  } on DioException catch (error) {
+    throw ApiException.fromDio(error);
+  }
+}

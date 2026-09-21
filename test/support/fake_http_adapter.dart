@@ -18,6 +18,12 @@ class FakeHttpAdapter implements HttpClientAdapter {
   /// Значение заголовка Authorization на каждом запросе.
   final List<Object?> authorizationHeaders = <Object?>[];
 
+  /// Параметры строки запроса — по ним проверяется сборка фильтров.
+  final List<Map<String, dynamic>> requestedQueries = <Map<String, dynamic>>[];
+
+  /// Тела запросов (для POST и PATCH).
+  final List<Object?> requestBodies = <Object?>[];
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -26,6 +32,8 @@ class FakeHttpAdapter implements HttpClientAdapter {
   ) {
     requestedPaths.add(options.path);
     authorizationHeaders.add(options.headers['Authorization']);
+    requestedQueries.add(options.queryParameters);
+    requestBodies.add(options.data);
     return respond(options);
   }
 
