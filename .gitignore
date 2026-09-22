@@ -48,6 +48,8 @@ app.*.map.json
 # Ключ подписи и android/key.properties уже перечислены в android/.gitignore.
 /android/build/
 /android/app/build/
+# Кэш Kotlin-компилятора: появляется после первой сборки Android.
+/android/.kotlin/
 
 # Widget Preview related
 .widget_preview/
