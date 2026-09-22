@@ -7,6 +7,7 @@ import '../../../core/router/routes.dart';
 import '../application/note_actions.dart';
 import '../data/models.dart';
 import '../data/notes_api.dart';
+import 'widgets/attachments_section.dart';
 
 /// Создание и редактирование записи.
 ///
@@ -363,6 +364,12 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage> {
                 ),
               ],
             ),
+            // Вложения — только у сохранённой заметки: серверу нужен её
+            // идентификатор, а у новой записи его ещё нет.
+            if (widget.isEditing) ...<Widget>[
+              const SizedBox(height: 20),
+              AttachmentsSection(noteId: widget.noteId!),
+            ],
             if (_error != null) ...<Widget>[
               const SizedBox(height: 16),
               _ErrorBanner(message: _error!),
