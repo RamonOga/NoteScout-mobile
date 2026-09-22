@@ -42,6 +42,22 @@ class NotesQueryController extends Notifier<NotesQuery> {
     state = state.copyWith(includeArchived: value);
   }
 
+  /// Вход в корзину и выход из неё.
+  ///
+  /// Сбрасывает теги и архив: в корзине архив бэкенд не учитывает, а счётчики
+  /// тегов относятся к активным записям — оставленные включёнными, они выглядели
+  /// бы как работающие фильтры, ничего не фильтруя. Строка поиска сохраняется:
+  /// искать по корзине — осмысленное действие.
+  void setDeletedOnly(bool value) {
+    if (state.deletedOnly == value) return;
+    state = NotesQuery(
+      text: state.text,
+      mode: state.mode,
+      type: state.type,
+      deletedOnly: value,
+    );
+  }
+
   void setType(NoteType? type) {
     if (state.type == type) return;
     state = state.copyWith(type: type);
