@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/api_exception.dart';
-import '../../../core/models/page_result.dart';
 import '../../../core/providers.dart';
 import '../data/models.dart';
-import '../data/notes_api.dart';
+import '../data/notes_repository.dart';
 
 /// Состояние фильтров списка.
 ///
@@ -62,6 +61,7 @@ class NotesState {
     required this.hasNext,
     this.totalElements = 0,
     this.loadingMore = false,
+    this.offline = false,
     this.loadMoreError,
     this.refreshError,
   });
@@ -71,6 +71,9 @@ class NotesState {
   final bool hasNext;
   final int totalElements;
   final bool loadingMore;
+
+  /// Данные пришли из оффлайн-кеша: связи нет, показано последнее известное.
+  final bool offline;
 
   /// Ошибка догрузки следующей страницы. Список при этом остаётся на экране —
   /// терять уже загруженное из-за обрыва связи незачем.
@@ -88,6 +91,7 @@ class NotesState {
     bool? hasNext,
     int? totalElements,
     bool? loadingMore,
+    bool? offline,
     String? loadMoreError,
     String? refreshError,
     bool clearLoadMoreError = false,
@@ -99,6 +103,7 @@ class NotesState {
         hasNext: hasNext ?? this.hasNext,
         totalElements: totalElements ?? this.totalElements,
         loadingMore: loadingMore ?? this.loadingMore,
+        offline: offline ?? this.offline,
         loadMoreError:
             clearLoadMoreError ? null : (loadMoreError ?? this.loadMoreError),
         refreshError:
@@ -117,8 +122,8 @@ class NotesController extends AsyncNotifier<NotesState> {
 
     // watch: смена фильтра пересобирает список автоматически.
     final query = ref.watch(notesQueryProvider);
-    final page = await ref.watch(notesApiProvider).list(query: query);
-    return _stateFrom(page);
+    final result = await ref.watch(notesRepositoryProvider).list(query: query);
+    return _stateFrom(result);
   }
 
   /// Полная перезагрузка — pull-to-refresh и после изменений.
@@ -131,8 +136,8 @@ class NotesController extends AsyncNotifier<NotesState> {
     final current = state.value;
 
     try {
-      final page = await ref.read(notesApiProvider).list(query: query);
-      state = AsyncData(_stateFrom(page));
+      final result = await ref.read(notesRepositoryProvider).list(query: query);
+      state = AsyncData(_stateFrom(result));
     } on ApiException catch (error) {
       if (current == null) {
         state = AsyncError<NotesState>(error, StackTrace.current);
@@ -161,17 +166,20 @@ class NotesController extends AsyncNotifier<NotesState> {
 
     try {
       final query = ref.read(notesQueryProvider);
-      final page = await ref
-          .read(notesApiProvider)
+      final result = await ref
+          .read(notesRepositoryProvider)
           .list(query: query, page: current.page + 1);
 
       state = AsyncData(
         current.copyWith(
-          notes: <Note>[...current.notes, ...page.items],
-          page: page.page,
-          hasNext: page.hasNext,
-          totalElements: page.totalElements,
+          notes: <Note>[...current.notes, ...result.page.items],
+          page: result.page.page,
+          hasNext: result.page.hasNext,
+          totalElements: result.page.totalElements,
           loadingMore: false,
+          // Догрузка удалась, значит связь есть: снимаем пометку оффлайна,
+          // даже если первые страницы пришли из кеша.
+          offline: result.fromCache,
           clearLoadMoreError: true,
           clearRefreshError: true,
         ),
@@ -186,11 +194,12 @@ class NotesController extends AsyncNotifier<NotesState> {
     }
   }
 
-  NotesState _stateFrom(PageResult<Note> page) => NotesState(
-        notes: page.items,
-        page: page.page,
-        hasNext: page.hasNext,
-        totalElements: page.totalElements,
+  NotesState _stateFrom(NotesListResult result) => NotesState(
+        notes: result.page.items,
+        page: result.page.page,
+        hasNext: result.page.hasNext,
+        totalElements: result.page.totalElements,
+        offline: result.fromCache,
       );
 }
 

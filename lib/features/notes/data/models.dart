@@ -68,6 +68,19 @@ class Note {
   @override
   int get hashCode => id.hashCode;
 
+  /// Обратная операция к [Note.fromJson] — нужна оффлайн-кешу.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'type': type.apiValue,
+        'title': title,
+        'tags': tags,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'content': content,
+        'url': url,
+        'archivedAt': archivedAt?.toIso8601String(),
+      };
+
   @override
   String toString() => 'Note($id, $title)';
 }
@@ -85,6 +98,12 @@ class Tag {
         name: json['name'] as String,
         noteCount: json['noteCount'] as int? ?? 0,
       );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'noteCount': noteCount,
+      };
 
   @override
   bool operator ==(Object other) => other is Tag && other.id == id;

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/notes_controller.dart';
 import '../../data/models.dart';
-import '../../data/notes_api.dart';
+import '../../data/notes_repository.dart';
 
 /// Панель фильтров: теги, архив и режим совпадения по тегам.
 class TagFilterBar extends ConsumerWidget {

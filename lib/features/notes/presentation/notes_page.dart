@@ -70,6 +70,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     final query = ref.watch(notesQueryProvider);
     final notes = ref.watch(notesControllerProvider);
     final refreshError = notes.value?.refreshError;
+    final offline = notes.value?.offline ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -113,6 +114,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
           // результаты остаются на экране, пока грузятся новые.
           if (notes.isLoading && notes.hasValue)
             const LinearProgressIndicator(minHeight: 2),
+          if (offline) const _OfflineBanner(),
           if (refreshError != null)
             _RefreshErrorBanner(
               message: refreshError,
@@ -165,6 +167,38 @@ class _NotesPageState extends ConsumerState<NotesPage> {
             onTap: () => context.go(AppRoutes.noteEdit(note.id)),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Полоса «нет связи»: на экране сохранённые данные, а не свежие.
+///
+/// Без неё вчерашний снимок выглядел бы как актуальный список, и пропавшую
+/// из него заметку пользователь счёл бы потерянной.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.cloud_off, size: 18, color: scheme.onSecondaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Нет связи. Показаны сохранённые данные.',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
