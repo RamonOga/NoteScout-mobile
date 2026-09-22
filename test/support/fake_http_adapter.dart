@@ -24,6 +24,11 @@ class FakeHttpAdapter implements HttpClientAdapter {
   /// Тела запросов (для POST и PATCH).
   final List<Object?> requestBodies = <Object?>[];
 
+  /// Полные параметры запросов. Нужны там, где важно не только «куда» и «что»,
+  /// но и как запрос настроен: например, что файл скачивается байтами,
+  /// а не разбирается как JSON.
+  final List<RequestOptions> requestOptions = <RequestOptions>[];
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -34,6 +39,7 @@ class FakeHttpAdapter implements HttpClientAdapter {
     authorizationHeaders.add(options.headers['Authorization']);
     requestedQueries.add(options.queryParameters);
     requestBodies.add(options.data);
+    requestOptions.add(options);
     return respond(options);
   }
 

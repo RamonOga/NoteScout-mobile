@@ -31,6 +31,22 @@ Map<String, dynamic> noteJson({
       'deletedAt': ?deletedAt,
     };
 
+/// Вложение в том виде, в каком его отдаёт бэкенд.
+Map<String, dynamic> attachmentJson({
+  String id = '22222222-2222-2222-2222-222222222222',
+  String fileName = 'файл.txt',
+  String contentType = 'text/plain',
+  int sizeBytes = 1024,
+  String createdAt = '2026-09-10T10:00:00Z',
+}) =>
+    <String, dynamic>{
+      'id': id,
+      'fileName': fileName,
+      'contentType': contentType,
+      'sizeBytes': sizeBytes,
+      'createdAt': createdAt,
+    };
+
 /// Страница списка заметок.
 Map<String, dynamic> notesPageJson(
   List<Map<String, dynamic>> notes, {
