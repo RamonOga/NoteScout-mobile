@@ -1,11 +1,11 @@
 {
-    "name": "notescout_mobile",
-    "short_name": "notescout_mobile",
+    "name": "NoteScout",
+    "short_name": "NoteScout",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#4F46E5",
+    "theme_color": "#4F46E5",
+    "description": "NoteScout — заметки и ссылки",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
