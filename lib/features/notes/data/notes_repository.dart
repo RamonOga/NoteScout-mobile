@@ -32,8 +32,14 @@ List<Note> matchNotes(Iterable<Note> notes, NotesQuery query) {
   final Set<String> wanted = query.tags.map((String tag) => tag.toLowerCase()).toSet();
 
   final List<Note> matched = notes.where((Note note) {
+    // Режимы взаимоисключающие, как и на сервере: в корзине только удалённые,
+    // вне неё — только живые.
+    if (query.deletedOnly != note.isDeleted) return false;
+
     if (query.type != null && note.type != query.type) return false;
-    if (!query.includeArchived && note.isArchived) return false;
+    // В корзине архив не учитывается: удалённую заметку нужно вернуть
+    // независимо от того, лежала ли она в архиве.
+    if (!query.deletedOnly && !query.includeArchived && note.isArchived) return false;
 
     if (wanted.isNotEmpty) {
       final Set<String> noteTags =

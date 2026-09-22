@@ -23,6 +23,7 @@ class Note {
     this.content,
     this.url,
     this.archivedAt,
+    this.deletedAt,
   });
 
   final String id;
@@ -35,7 +36,11 @@ class Note {
   final String? url;
   final DateTime? archivedAt;
 
+  /// Момент мягкого удаления; null у активной заметки.
+  final DateTime? deletedAt;
+
   bool get isArchived => archivedAt != null;
+  bool get isDeleted => deletedAt != null;
 
   /// Короткий текст для карточки в списке.
   String get preview {
@@ -60,6 +65,9 @@ class Note {
         archivedAt: json['archivedAt'] == null
             ? null
             : DateTime.parse(json['archivedAt'] as String),
+        deletedAt: json['deletedAt'] == null
+            ? null
+            : DateTime.parse(json['deletedAt'] as String),
       );
 
   @override
@@ -132,6 +140,7 @@ class NotesQuery {
     this.tags = const <String>{},
     this.mode = TagsMode.any,
     this.includeArchived = false,
+    this.deletedOnly = false,
     this.type,
   });
 
@@ -143,10 +152,19 @@ class NotesQuery {
 
   final TagsMode mode;
   final bool includeArchived;
+
+  /// Режим корзины: показывать только удалённые записи. Взаимоисключающий с
+  /// [includeArchived] — бэкенд в этом режиме архив не учитывает.
+  final bool deletedOnly;
+
   final NoteType? type;
 
   bool get hasFilters =>
-      text.trim().isNotEmpty || tags.isNotEmpty || includeArchived || type != null;
+      text.trim().isNotEmpty ||
+      tags.isNotEmpty ||
+      includeArchived ||
+      deletedOnly ||
+      type != null;
 
   /// Сентинел: отличает «не передан» от «передан null» для необязательного поля.
   static const Object _unset = Object();
@@ -156,6 +174,7 @@ class NotesQuery {
     Set<String>? tags,
     TagsMode? mode,
     bool? includeArchived,
+    bool? deletedOnly,
     Object? type = _unset,
   }) =>
       NotesQuery(
@@ -163,10 +182,12 @@ class NotesQuery {
         tags: tags ?? this.tags,
         mode: mode ?? this.mode,
         includeArchived: includeArchived ?? this.includeArchived,
+        deletedOnly: deletedOnly ?? this.deletedOnly,
         type: identical(type, _unset) ? this.type : type as NoteType?,
       );
 
   /// Сбрасывает всё, кроме текста поиска: его пользователь стирает сам.
+  /// Заодно выходит из корзины.
   NotesQuery withoutFilters() => NotesQuery(text: text);
 
   @override
@@ -175,6 +196,7 @@ class NotesQuery {
       other.text == text &&
       other.mode == mode &&
       other.includeArchived == includeArchived &&
+      other.deletedOnly == deletedOnly &&
       other.type == type &&
       other.tags.length == tags.length &&
       other.tags.containsAll(tags);
@@ -184,6 +206,7 @@ class NotesQuery {
         text,
         mode,
         includeArchived,
+        deletedOnly,
         type,
         Object.hashAllUnordered(tags),
       );

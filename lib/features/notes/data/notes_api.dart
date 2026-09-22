@@ -34,6 +34,8 @@ class NotesApi {
             // Режим имеет смысл только когда тегов больше одного.
             if (query.tags.length > 1) 'tagsMode': query.mode.apiValue,
             if (query.includeArchived) 'includeArchived': true,
+            // Корзина: бэкенд отдаёт только удалённые, архив в этом режиме не учитывается.
+            if (query.deletedOnly) 'deletedOnly': true,
             // Null-aware элемент: поле уходит только если тип выбран.
             'type': ?query.type?.apiValue,
           },

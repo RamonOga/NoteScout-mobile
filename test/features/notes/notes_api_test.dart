@@ -41,6 +41,21 @@ void main() {
       expect(query.containsKey('tag'), isFalse);
       expect(query.containsKey('type'), isFalse);
       expect(query.containsKey('includeArchived'), isFalse);
+      expect(query.containsKey('deletedOnly'), isFalse);
+    });
+
+    test('корзина запрашивается параметром deletedOnly', () async {
+      final adapter = FakeHttpAdapter(
+        (_) async => jsonResponse(notesPageJson(<Map<String, dynamic>>[])),
+      );
+
+      await NotesApi(apiClient: dioWith(adapter))
+          .list(query: const NotesQuery(deletedOnly: true));
+
+      final query = adapter.requestedQueries.single;
+      expect(query['deletedOnly'], isTrue);
+      // Архив в корзине не учитывается, и клиент его туда не шлёт.
+      expect(query.containsKey('includeArchived'), isFalse);
     });
 
     test('фильтры превращаются в параметры запроса', () async {

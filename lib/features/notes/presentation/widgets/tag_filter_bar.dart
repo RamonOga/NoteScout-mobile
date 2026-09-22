@@ -5,7 +5,7 @@ import '../../application/notes_controller.dart';
 import '../../data/models.dart';
 import '../../data/notes_repository.dart';
 
-/// Панель фильтров: теги, архив и режим совпадения по тегам.
+/// Панель фильтров: теги, архив, корзина и режим совпадения по тегам.
 class TagFilterBar extends ConsumerWidget {
   const TagFilterBar({super.key});
 
@@ -19,34 +19,38 @@ class TagFilterBar extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        tags.when(
-          loading: () => const SizedBox(height: 40),
-          // Ошибка загрузки тегов не должна ломать экран: список заметок
-          // продолжает работать, просто без панели тегов.
-          error: (_, _) => const SizedBox.shrink(),
-          data: (List<Tag> items) {
-            if (items.isEmpty) return const SizedBox.shrink();
+        // В корзине панель тегов скрыта: счётчики у тегов считают только
+        // активные записи, и рядом с удалёнными они показывали бы не то, что
+        // на экране. Фильтр по тегам при входе в корзину сбрасывается.
+        if (!query.deletedOnly)
+          tags.when(
+            loading: () => const SizedBox(height: 40),
+            // Ошибка загрузки тегов не должна ломать экран: список заметок
+            // продолжает работать, просто без панели тегов.
+            error: (_, _) => const SizedBox.shrink(),
+            data: (List<Tag> items) {
+              if (items.isEmpty) return const SizedBox.shrink();
 
-            return SizedBox(
-              height: 44,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: items.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (BuildContext context, int index) {
-                  final tag = items[index];
-                  final selected = query.tags.contains(tag.name);
-                  return FilterChip(
-                    label: Text('${tag.name} · ${tag.noteCount}'),
-                    selected: selected,
-                    onSelected: (_) => controller.toggleTag(tag.name),
-                  );
-                },
-              ),
-            );
-          },
-        ),
+              return SizedBox(
+                height: 44,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (BuildContext context, int index) {
+                    final tag = items[index];
+                    final selected = query.tags.contains(tag.name);
+                    return FilterChip(
+                      label: Text('${tag.name} · ${tag.noteCount}'),
+                      selected: selected,
+                      onSelected: (_) => controller.toggleTag(tag.name),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
         if (query.tags.length > 1)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
@@ -79,10 +83,18 @@ class TagFilterBar extends ConsumerWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               FilterChip(
-                label: const Text('Архив'),
-                selected: query.includeArchived,
-                onSelected: controller.setIncludeArchived,
+                label: const Text('Удалённые'),
+                selected: query.deletedOnly,
+                onSelected: controller.setDeletedOnly,
               ),
+              // Бэкенд в режиме корзины архив не учитывает — чипа нет,
+              // чтобы не показывать переключатель, который ничего не делает.
+              if (!query.deletedOnly)
+                FilterChip(
+                  label: const Text('Архив'),
+                  selected: query.includeArchived,
+                  onSelected: controller.setIncludeArchived,
+                ),
               FilterChip(
                 label: const Text('Только ссылки'),
                 selected: query.type == NoteType.link,

@@ -25,6 +25,7 @@ Note _note({
   List<String> tags = const <String>[],
   String type = 'TEXT',
   String? archivedAt,
+  String? deletedAt,
   String updatedAt = '2026-09-02T10:00:00Z',
 }) {
   final Map<String, dynamic> json = noteJson(
@@ -34,6 +35,7 @@ Note _note({
     tags: tags,
     type: type,
     archivedAt: archivedAt,
+    deletedAt: deletedAt,
   );
   json['updatedAt'] = updatedAt;
   return Note.fromJson(json);
@@ -157,6 +159,45 @@ void main() {
 
       expect(byTitle.map((Note n) => n.id), <String>['a']);
       expect(byContent.map((Note n) => n.id), <String>['x']);
+    });
+
+    test('корзина показывает только удалённые, а обычный список — только живые',
+        () {
+      final List<Note> all = <Note>[
+        _note(id: 'alive', title: 'Живая'),
+        _note(
+          id: 'gone',
+          title: 'Удалённая',
+          deletedAt: '2026-09-05T10:00:00Z',
+          updatedAt: '2026-09-05T10:00:00Z',
+        ),
+      ];
+
+      expect(
+        matchNotes(all, const NotesQuery()).map((Note n) => n.id),
+        <String>['alive'],
+      );
+      expect(
+        matchNotes(all, const NotesQuery(deletedOnly: true)).map((Note n) => n.id),
+        <String>['gone'],
+      );
+    });
+
+    test('в корзине архив не мешает показать удалённую заметку', () {
+      // Заметку могли удалить уже из архива — вернуть её всё равно нужно.
+      final List<Note> archived = <Note>[
+        _note(
+          id: 'gone',
+          archivedAt: '2026-08-01T10:00:00Z',
+          deletedAt: '2026-09-05T10:00:00Z',
+        ),
+      ];
+
+      expect(
+        matchNotes(archived, const NotesQuery(deletedOnly: true)),
+        hasLength(1),
+      );
+      expect(matchNotes(archived, const NotesQuery()), isEmpty);
     });
   });
 
