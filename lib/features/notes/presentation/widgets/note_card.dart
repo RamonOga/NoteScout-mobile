@@ -5,10 +5,14 @@ import '../../data/models.dart';
 
 /// Карточка заметки в списке.
 class NoteCard extends StatelessWidget {
-  const NoteCard({super.key, required this.note, this.onTap});
+  const NoteCard({super.key, required this.note, this.onTap, this.onRestore});
 
   final Note note;
   final VoidCallback? onTap;
+
+  /// Кнопка «Восстановить». Показывается, только если передана, — то есть
+  /// в корзине. В обычном списке удалённых записей не бывает.
+  final VoidCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -81,10 +85,24 @@ class NoteCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 8),
-              Text(
-                formatNoteDate(note.updatedAt),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      note.isDeleted
+                          ? 'Удалено ${formatNoteDate(note.deletedAt!)}'
+                          : formatNoteDate(note.updatedAt),
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.outline),
+                    ),
+                  ),
+                  if (onRestore != null)
+                    TextButton.icon(
+                      onPressed: onRestore,
+                      icon: const Icon(Icons.restore, size: 18),
+                      label: const Text('Восстановить'),
+                    ),
+                ],
               ),
             ],
           ),

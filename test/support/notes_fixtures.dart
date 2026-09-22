@@ -13,6 +13,7 @@ Map<String, dynamic> noteJson({
   String? url,
   List<String> tags = const <String>[],
   String? archivedAt,
+  String? deletedAt,
 }) =>
     <String, dynamic>{
       'id': id,
@@ -27,6 +28,7 @@ Map<String, dynamic> noteJson({
       'content': ?content,
       'url': ?url,
       'archivedAt': ?archivedAt,
+      'deletedAt': ?deletedAt,
     };
 
 /// Страница списка заметок.

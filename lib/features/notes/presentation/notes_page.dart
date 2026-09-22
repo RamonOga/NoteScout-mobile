@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/error/api_exception.dart';
 import '../../../core/router/routes.dart';
 import '../../auth/application/auth_service.dart';
+import '../application/note_actions.dart';
 import '../application/notes_controller.dart';
+import '../data/models.dart';
 import 'widgets/note_card.dart';
 import 'widgets/tag_filter_bar.dart';
 
@@ -65,6 +68,20 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     ref.read(notesQueryProvider.notifier).setText('');
   }
 
+  /// Возвращает заметку из корзины. Список обновится сам: NoteActions после
+  /// изменения инвалидирует и список, и счётчики тегов.
+  Future<void> _restore(String id) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(noteActionsProvider).restore(id);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Заметка восстановлена')),
+      );
+    } on ApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.displayMessage)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = ref.watch(notesQueryProvider);
@@ -82,11 +99,15 @@ class _NotesPageState extends ConsumerState<NotesPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go(AppRoutes.noteNew),
-        icon: const Icon(Icons.add),
-        label: const Text('Запись'),
-      ),
+      // В корзине создавать нечего: новая запись туда не попадёт и появится
+      // только после выхода из корзины.
+      floatingActionButton: query.deletedOnly
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => context.go(AppRoutes.noteNew),
+              icon: const Icon(Icons.add),
+              label: const Text('Запись'),
+            ),
       body: Column(
         children: <Widget>[
           Padding(
@@ -129,7 +150,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                 onRetry: () =>
                     ref.read(notesControllerProvider.notifier).refresh(),
               ),
-              data: (NotesState state) => _buildList(state, query.hasFilters),
+              data: (NotesState state) => _buildList(state, query),
             ),
           ),
         ],
@@ -137,10 +158,10 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     );
   }
 
-  Widget _buildList(NotesState state, bool filtersActive) {
+  Widget _buildList(NotesState state, NotesQuery query) {
     if (state.isEmpty) {
       return _EmptyState(
-        filtersActive: filtersActive,
+        query: query,
         onCreate: () => context.go(AppRoutes.noteNew),
       );
     }
@@ -160,6 +181,13 @@ class _NotesPageState extends ConsumerState<NotesPage> {
           }
 
           final note = state.notes[index];
+
+          // В корзине карточка не открывается в редакторе: GET /notes/{id} для
+          // удалённой записи отвечает 404, и переход вёл бы в экран ошибки.
+          if (query.deletedOnly) {
+            return NoteCard(note: note, onRestore: () => _restore(note.id));
+          }
+
           return NoteCard(
             note: note,
             onTap: () => context.go(AppRoutes.noteEdit(note.id)),
@@ -231,17 +259,30 @@ class _LoadMoreTile extends StatelessWidget {  const _LoadMoreTile({this.error, 
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.filtersActive, required this.onCreate});
+  const _EmptyState({required this.query, required this.onCreate});
 
-  final bool filtersActive;
+  final NotesQuery query;
   final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final message = filtersActive
-        ? 'Ничего не найдено.\nПопробуйте изменить запрос или снять фильтры.'
-        : 'Записей пока нет.\nСоздайте первую — заметку или ссылку.';
+    final searched = query.text.trim().isNotEmpty;
+
+    final String message;
+    if (query.deletedOnly) {
+      message = searched
+          ? 'В корзине ничего не найдено.'
+          : 'Корзина пуста.\nУдалённые записи можно восстановить отсюда.';
+    } else if (query.hasFilters) {
+      message = 'Ничего не найдено.\nПопробуйте изменить запрос или снять фильтры.';
+    } else {
+      message = 'Записей пока нет.\nСоздайте первую — заметку или ссылку.';
+    }
+
+    // Кнопка «Создать» уместна только в пустом основном списке: в корзине и при
+    // активных фильтрах она предлагает действие не по ситуации.
+    final showCreate = !query.deletedOnly && !query.hasFilters;
 
     return ListView(
       // ListView, а не Center: иначе на экране не работает pull-to-refresh.
@@ -249,13 +290,15 @@ class _EmptyState extends StatelessWidget {
       children: <Widget>[
         const SizedBox(height: 48),
         Icon(
-          filtersActive ? Icons.search_off : Icons.sticky_note_2_outlined,
+          query.deletedOnly
+              ? Icons.delete_outline
+              : (query.hasFilters ? Icons.search_off : Icons.sticky_note_2_outlined),
           size: 56,
           color: theme.colorScheme.outline,
         ),
         const SizedBox(height: 16),
         Text(message, textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
-        if (!filtersActive) ...<Widget>[
+        if (showCreate) ...<Widget>[
           const SizedBox(height: 24),
           Center(
             child: FilledButton.icon(

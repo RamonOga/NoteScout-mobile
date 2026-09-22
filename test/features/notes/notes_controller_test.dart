@@ -44,6 +44,51 @@ void main() {
       expect(adapter.requestedQueries.last['q'], 'докум');
     });
 
+    test('вход в корзину сбрасывает теги и архив', () async {
+      final adapter = FakeHttpAdapter(
+        (_) async => jsonResponse(notesPageJson(<Map<String, dynamic>>[])),
+      );
+      final container = notesContainer(adapter);
+
+      await container.read(notesControllerProvider.future);
+
+      final queries = container.read(notesQueryProvider.notifier);
+      queries.toggleTag('java');
+      queries.setIncludeArchived(true);
+      await container.read(notesControllerProvider.future);
+
+      queries.setDeletedOnly(true);
+      await container.read(notesControllerProvider.future);
+
+      final last = adapter.requestedQueries.last;
+      expect(last['deletedOnly'], isTrue);
+      // Теги и архив в корзине смысла не имеют: счётчики тегов считают только
+      // активные записи, а архив бэкенд в этом режиме не учитывает.
+      expect(last.containsKey('tag'), isFalse);
+      expect(last.containsKey('includeArchived'), isFalse);
+
+      final query = container.read(notesQueryProvider);
+      expect(query.tags, isEmpty);
+      expect(query.includeArchived, isFalse);
+    });
+
+    test('выход из корзины возвращает обычный список', () async {
+      final adapter = FakeHttpAdapter(
+        (_) async => jsonResponse(notesPageJson(<Map<String, dynamic>>[])),
+      );
+      final container = notesContainer(adapter);
+
+      final queries = container.read(notesQueryProvider.notifier);
+      queries.setDeletedOnly(true);
+      await container.read(notesControllerProvider.future);
+      expect(adapter.requestedQueries.last['deletedOnly'], isTrue);
+
+      queries.setDeletedOnly(false);
+      await container.read(notesControllerProvider.future);
+
+      expect(adapter.requestedQueries.last.containsKey('deletedOnly'), isFalse);
+    });
+
     test('догрузка добавляет следующую страницу и останавливается', () async {
       final adapter = FakeHttpAdapter((options) async {
         final page = options.queryParameters['page'] as int;

@@ -11,7 +11,14 @@ void main() {
       expect(query.tags, isEmpty);
       expect(query.mode, TagsMode.any);
       expect(query.includeArchived, isFalse);
+      expect(query.deletedOnly, isFalse);
       expect(query.type, isNull);
+    });
+
+    test('режим корзины считается фильтром', () {
+      const query = NotesQuery(deletedOnly: true);
+
+      expect(query.hasFilters, isTrue);
     });
 
     test('copyWith меняет только переданные поля', () {
@@ -39,6 +46,7 @@ void main() {
         text: 'док',
         tags: <String>{'java'},
         includeArchived: true,
+        deletedOnly: true,
         type: NoteType.link,
       );
 
@@ -48,6 +56,7 @@ void main() {
       expect(cleared.hasFilters, isTrue, reason: 'строка поиска — тоже фильтр');
       expect(cleared.tags, isEmpty);
       expect(cleared.includeArchived, isFalse);
+      expect(cleared.deletedOnly, isFalse, reason: 'сброс выводит из корзины');
       expect(cleared.type, isNull);
     });
 
@@ -134,6 +143,35 @@ void main() {
       });
 
       expect(note.isArchived, isTrue);
+    });
+
+    test('удалённая запись помечается и хранит момент удаления', () {
+      final note = Note.fromJson(<String, dynamic>{
+        'id': 'id-4',
+        'type': 'TEXT',
+        'title': 'В корзине',
+        'tags': <String>[],
+        'createdAt': '2026-09-01T10:00:00Z',
+        'updatedAt': '2026-09-04T10:00:00Z',
+        'deletedAt': '2026-09-04T10:00:00Z',
+      });
+
+      expect(note.isDeleted, isTrue);
+      expect(note.deletedAt, DateTime.parse('2026-09-04T10:00:00Z'));
+    });
+
+    test('активная запись удалённой не считается', () {
+      final note = Note.fromJson(<String, dynamic>{
+        'id': 'id-5',
+        'type': 'TEXT',
+        'title': 'Живая',
+        'tags': <String>[],
+        'createdAt': '2026-09-01T10:00:00Z',
+        'updatedAt': '2026-09-02T10:00:00Z',
+      });
+
+      expect(note.isDeleted, isFalse);
+      expect(note.deletedAt, isNull);
     });
   });
 }

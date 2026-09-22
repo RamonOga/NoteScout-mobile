@@ -28,6 +28,33 @@ Future<ResponseBody> Function(RequestOptions) _responder({
   };
 }
 
+/// Ответы для проверки корзины: содержимое зависит от режима, а на
+/// восстановление приходит одиночная заметка, а не страница.
+Future<ResponseBody> Function(RequestOptions) _trashResponder() {
+  return (RequestOptions options) async {
+    if (options.path == '/tags') {
+      return jsonResponse(<Map<String, dynamic>>[]);
+    }
+    if (options.path.endsWith('/restore')) {
+      return jsonResponse(noteJson(id: 'd', title: 'Удалённая'));
+    }
+    final deletedOnly = options.queryParameters['deletedOnly'] == true;
+    return jsonResponse(
+      notesPageJson(
+        <Map<String, dynamic>>[
+          deletedOnly
+              ? noteJson(
+                  id: 'd',
+                  title: 'Удалённая',
+                  deletedAt: '2026-09-04T10:00:00Z',
+                )
+              : noteJson(id: 'a', title: 'Активная'),
+        ],
+      ),
+    );
+  };
+}
+
 Widget _wrap(FakeHttpAdapter adapter, Widget child) => ProviderScope(
       overrides: [
         notesApiProvider.overrideWithValue(NotesApi(apiClient: dioWith(adapter))),
@@ -96,6 +123,34 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('работа · 3'), findsOneWidget);
+    });
+
+    testWidgets('корзина запрашивается отдельно и даёт восстановить запись',
+        (WidgetTester tester) async {
+      final adapter = FakeHttpAdapter(_trashResponder());
+
+      await tester.pumpWidget(_wrap(adapter, const NotesPage()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Активная'), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+
+      await tester.tap(find.text('Удалённые'));
+      await tester.pumpAndSettle();
+
+      // Список перезапрошен в режиме корзины, и в нём кнопка восстановления.
+      expect(adapter.requestedQueries.last['deletedOnly'], isTrue);
+      expect(find.text('Удалённая'), findsOneWidget);
+      expect(find.text('Восстановить'), findsOneWidget);
+      expect(find.textContaining('Удалено'), findsOneWidget);
+
+      // Создавать в корзине нечего: новая запись туда не попадёт.
+      expect(find.byType(FloatingActionButton), findsNothing);
+
+      await tester.tap(find.text('Восстановить'));
+      await tester.pumpAndSettle();
+
+      expect(adapter.requestedPaths, contains('/notes/d/restore'));
     });
   });
 }
