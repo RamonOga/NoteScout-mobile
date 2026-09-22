@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notescout_mobile/core/providers.dart';
 import 'package:notescout_mobile/core/session/token_storage.dart';
+import 'package:notescout_mobile/features/notes/data/models.dart';
 import 'package:notescout_mobile/features/notes/data/notes_api.dart';
+import 'package:notescout_mobile/features/notes/data/notes_cache.dart';
+import 'package:notescout_mobile/features/notes/data/notes_repository.dart';
 import 'package:notescout_mobile/features/notes/presentation/notes_page.dart';
 
 import '../../../support/fake_http_adapter.dart';
+import '../../../support/in_memory_cache_store.dart';
 import '../../../support/notes_fixtures.dart';
 
 /// Панель фильтров запрашивает теги отдельно, поэтому отвечаем по пути.
@@ -26,6 +30,14 @@ Future<ResponseBody> Function(RequestOptions) _responder({
     }
     return jsonResponse(notesPageJson(notes, hasNext: hasNext));
   };
+}
+
+/// Полная потеря связи: ответа нет вовсе.
+Future<ResponseBody> _offline(RequestOptions options) async {
+  throw DioException(
+    requestOptions: options,
+    type: DioExceptionType.connectionError,
+  );
 }
 
 /// Ответы для проверки корзины: содержимое зависит от режима, а на
@@ -55,10 +67,14 @@ Future<ResponseBody> Function(RequestOptions) _trashResponder() {
   };
 }
 
-Widget _wrap(FakeHttpAdapter adapter, Widget child) => ProviderScope(
+Widget _wrap(FakeHttpAdapter adapter, Widget child, {NotesCache? cache}) =>
+    ProviderScope(
       overrides: [
         notesApiProvider.overrideWithValue(NotesApi(apiClient: dioWith(adapter))),
         tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+        // Без подмены кеша оффлайн-поведение не проверить: в тестовом
+        // окружении каталога приложения нет, и кеш просто не создастся.
+        if (cache != null) notesCacheProvider.overrideWithValue(cache),
       ],
       child: MaterialApp(home: child),
     );
@@ -123,6 +139,45 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('работа · 3'), findsOneWidget);
+    });
+
+    testWidgets('без связи показывает сохранённое и говорит об этом',
+        (WidgetTester tester) async {
+      final store = InMemoryCacheStore();
+      final cache = NotesCache.fromStore(store);
+      await cache.update(
+        (NotesSnapshot snapshot) => snapshot.withNotes(<Note>[
+          Note.fromJson(noteJson(id: 'a', title: 'Заметка из кеша')),
+        ]),
+      );
+
+      final adapter = FakeHttpAdapter(_offline);
+
+      await tester.pumpWidget(_wrap(adapter, const NotesPage(), cache: cache));
+      await tester.pumpAndSettle();
+
+      // Данные из снимка видны, но выдать их за свежие нельзя.
+      expect(find.text('Заметка из кеша'), findsOneWidget);
+      expect(find.textContaining('Нет связи'), findsOneWidget);
+    });
+
+    testWidgets('ошибку сервера кешем не подменяет',
+        (WidgetTester tester) async {
+      final cache = NotesCache.fromStore(InMemoryCacheStore());
+      await cache.update(
+        (NotesSnapshot snapshot) => snapshot.withNotes(<Note>[
+          Note.fromJson(noteJson(id: 'a', title: 'Заметка из кеша')),
+        ]),
+      );
+
+      final adapter = FakeHttpAdapter(_responder(notes: const [], failNotes: true));
+
+      await tester.pumpWidget(_wrap(adapter, const NotesPage(), cache: cache));
+      await tester.pumpAndSettle();
+
+      // Показать старое вместо поломки сервера — значит её скрыть.
+      expect(find.text('Не удалось загрузить записи'), findsOneWidget);
+      expect(find.text('Заметка из кеша'), findsNothing);
     });
 
     testWidgets('корзина запрашивается отдельно и даёт восстановить запись',
